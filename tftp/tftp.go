@@ -1,6 +1,11 @@
 package tftp
 
-import "errors"
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"slices"
+)
 
 // TFTP OpCode定義
 const (
@@ -33,6 +38,10 @@ const (
 var (
 	// ErrInvalidOpCode は無効なオペコードに対するエラーです
 	ErrInvalidOpCode = errors.New("invalid opcode")
+	// ErrInvalidMode は無効なモードに対するエラーです
+	ErrInvalidMode = errors.New("invalid mode")
+	// ErrInvalidPacket は無効なパケットに対するエラーです
+	ErrInvalidPacket = errors.New("invalid packet")
 )
 
 // tftpPacket は TFTPパケットの構造体。
@@ -94,6 +103,66 @@ func (p *tftpPacket) MarshallPacket() ([]byte, error) {
 		offset += 2
 		copy(packet[offset:], p.ErrMsg)
 		offset += len(p.ErrMsg) + 1 // エラーメッセージの後にヌル文字
+	default:
+		return nil, ErrInvalidOpCode
+	}
+
+	return packet, nil
+}
+
+// UnmarshallPacket はバイトスライスを tftpPacket に変換。
+func UnmarshallPacket(data []byte) (*tftpPacket, error) {
+	// データの長さが4バイト未満の場合はエラー
+	// rfc1350では、4Byteより短い形式はない。
+	if len(data) < 4 {
+		return nil, fmt.Errorf("%w, packet too short: %d bytes", ErrInvalidPacket, len(data))
+	}
+
+	opCode := uint16(data[0])<<8 | uint16(data[1])
+	packet := &tftpPacket{OpCode: opCode}
+
+	offset := 2
+
+	switch opCode {
+	case OpRRQ, OpWRQ:
+		if data[len(data)-1] != 0 {
+			return nil, fmt.Errorf("%w, filename must end with null byte", ErrInvalidPacket)
+		}
+
+		split := bytes.Split(data[offset:len(data)-1], []byte{0})
+
+		if len(split) != 2 {
+			return nil, fmt.Errorf("%w, broken packet", ErrInvalidPacket)
+		}
+
+		packet.Filename = string(split[0])
+		packet.Mode = string(split[1])
+	case OpDATA:
+		packet.Block = uint16(data[offset])<<8 | uint16(data[offset+1])
+		offset += 2
+		packet.Data = data[offset:]
+	case OpACK:
+		if len(data) != 4 {
+			return nil, fmt.Errorf("%w, ack packet must be 4 bytes", ErrInvalidPacket)
+		}
+
+		packet.Block = uint16(data[offset])<<8 | uint16(data[offset+1])
+	case OpERROR:
+		if len(data) < 5 {
+			return nil, fmt.Errorf("%w, error packet must be at least 5 bytes", ErrInvalidPacket)
+		}
+		packet.ErrorCode = uint16(data[offset])<<8 | uint16(data[offset+1])
+		offset += 2
+
+		if data[len(data)-1] != 0 {
+			return nil, fmt.Errorf("%w, error message must start with null byte", ErrInvalidPacket)
+		}
+
+		buf := data[offset : len(data)-1] // 最後のヌル文字を除外
+		if slices.Index(buf, 0) > 0 {
+			return nil, fmt.Errorf("%w, broken packet", ErrInvalidPacket)
+		}
+		packet.ErrMsg = string(buf)
 	default:
 		return nil, ErrInvalidOpCode
 	}
