@@ -158,13 +158,18 @@ func TestUnmarshalPacket(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "Broken Packet (RRQ broken mode with extra char)",
+			name: "Broken Packet (mode with extra char)",
 			data: []byte{
 				0x00, 0x01, // OpCode for RRQ
 				't', 'e', 's', 't', 'f', 'i', 'l', 'e', '.', 't', 'x', 't', 0x00, // Filename without null terminator
 				'o', 'c', 't', 'e', 't', 0x00, 'a', // Mode without null terminator
 			},
-			wantErr: true,
+			wantErr: false,
+			want: &tftpPacket{
+				OpCode:   OpRRQ,
+				Filename: "testfile.txt",
+				Mode:     ModeOctet,
+			},
 		},
 		{
 			name: "DATA Packet",
@@ -223,13 +228,18 @@ func TestUnmarshalPacket(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "ERROR Packet (broken, extra char)",
+			name: "ERROR Packet (extra char)",
 			data: []byte{
 				0x00, 0x05, // OpCode for ERROR
 				0x00, 0x00, // Error code (Not Defined)
 				'e', 'r', 'r', 'o', 'r', 0x00, 'a',
 			},
-			wantErr: true,
+			wantErr: false,
+			want: &tftpPacket{
+				OpCode:    OpERROR,
+				ErrorCode: ErrorNotDefined,
+				ErrMsg:    "error",
+			},
 		},
 	}
 

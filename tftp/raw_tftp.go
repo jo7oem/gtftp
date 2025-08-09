@@ -1,7 +1,6 @@
 package tftp
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"slices"
@@ -179,18 +178,19 @@ func UnmarshallPacket(data []byte) (*tftpPacket, error) {
 
 	switch opCode {
 	case OpRRQ, OpWRQ:
-		if data[len(data)-1] != 0 {
-			return nil, fmt.Errorf("%w, filename must end with null byte", ErrInvalidPacket)
+		endFilename := slices.Index(data[offset:], 0) // ヌル文字の位置を探す
+		if endFilename < 0 {
+			return nil, fmt.Errorf("%w, broken packet", ErrInvalidPacket)
 		}
+		packet.Filename = string(data[offset : offset+endFilename])
+		offset += endFilename + 1 // ヌル文字の後に移動
 
-		split := bytes.Split(data[offset:len(data)-1], []byte{0})
-
-		if len(split) != 2 {
+		endMode := slices.Index(data[offset:], 0) // ヌル文字の位置を探す
+		if endMode < 0 {
 			return nil, fmt.Errorf("%w, broken packet", ErrInvalidPacket)
 		}
 
-		packet.Filename = string(split[0])
-		packet.Mode = string(split[1])
+		packet.Mode = string(data[offset : offset+endMode])
 	case OpDATA:
 		packet.Block = uint16(data[offset])<<8 | uint16(data[offset+1])
 		offset += 2
@@ -208,15 +208,11 @@ func UnmarshallPacket(data []byte) (*tftpPacket, error) {
 		packet.ErrorCode = uint16(data[offset])<<8 | uint16(data[offset+1])
 		offset += 2
 
-		if data[len(data)-1] != 0 {
-			return nil, fmt.Errorf("%w, error message must start with null byte", ErrInvalidPacket)
-		}
-
-		buf := data[offset : len(data)-1] // 最後のヌル文字を除外
-		if slices.Index(buf, 0) > 0 {
+		endErrMsg := slices.Index(data[offset:], 0)
+		if endErrMsg < 0 {
 			return nil, fmt.Errorf("%w, broken packet", ErrInvalidPacket)
 		}
-		packet.ErrMsg = string(buf)
+		packet.ErrMsg = string(data[offset : offset+endErrMsg])
 	default:
 		return nil, ErrInvalidOpCode
 	}
