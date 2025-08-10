@@ -1,6 +1,5 @@
 DEV_BIN:=$(shell pwd)/dev_tools/bin
 MAKEFILE_DIR := $(shell cd $(dir $(lastword $(MAKEFILE_LIST)))&&pwd )
-ABS_DEV_BIN := $(MAKEFILE_DIR)/$(DEV_BIN)
 
 .PHONY: build
 build:
@@ -19,16 +18,16 @@ setup: $(DEV_BIN)/air $(DEV_BIN)/dlv $(DEV_BIN)/golangci-lint
 
 $(DEV_BIN)/air:
 	mkdir -p $(@D)
-	go install github.com/air-verse/air@v1.62.0
+	GOBIN=$(DEV_BIN) go install github.com/air-verse/air@v1.62.0
 
 
 $(DEV_BIN)/golangci-lint:
 	mkdir -p $(@D)
-	GOBIN=$(ABS_DEV_BIN) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.3.1
+	GOBIN=$(DEV_BIN) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.3.1
 
 $(DEV_BIN)/dlv:
 	mkdir -p $(@D)
-	GOBIN=$(ABS_DEV_BIN) go install github.com/go-delve/delve/cmd/dlv@latest
+	GOBIN=$(DEV_BIN) go install github.com/go-delve/delve/cmd/dlv@latest
 
 .PHONY: ci
 ci: lint
